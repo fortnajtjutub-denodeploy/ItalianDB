@@ -1,1 +1,1 @@
-export { ItalianDB } from "./src/db.ts";
+export { default as ItalianDB } from "./src/db.ts";
