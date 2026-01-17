@@ -1,5 +1,4 @@
 import { type Collection, Query } from "./query.ts";
-import { encode, decode } from "@msgpack/msgpack";
 
 export default class ItalianDB {
   private collections: Record<string, Collection> = {};
@@ -17,7 +16,7 @@ export default class ItalianDB {
     if (filePath) {
       try {
         const raw = Deno.readFileSync(filePath);
-        this.collections = decode(raw) as Record<string, Collection>;
+        this.collections = JSON.parse(new TextDecoder().decode(raw)) as Record<string, Collection>;
       } catch (error) {
         // Log the error but don't throw - start fresh
         console.warn(`Failed to load database from ${filePath}:`, error);
@@ -74,7 +73,7 @@ export default class ItalianDB {
     try {
       const tempFile = `${this.filePath}.tmp`;
       // Write to temp file first
-      Deno.writeFileSync(tempFile, encode(this.collections));
+      Deno.writeFileSync(tempFile, new TextEncoder().encode(JSON.stringify(this.collections)));
       // Atomic rename/move
       Deno.renameSync(tempFile, this.filePath);
     } catch (error) {
