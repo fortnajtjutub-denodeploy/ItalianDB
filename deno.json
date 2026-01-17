@@ -2,10 +2,5 @@
   "name": "@kerb/italian-db",
   "version": "0.0.1",
   "license": "MIT",
-  "exports": "./mod.ts",
-  "lint": {
-    "rules": {
-      "allow": ["no-explicit-any"]
-    }
-  }
+  "exports": "./mod.ts"
 }
