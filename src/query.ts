@@ -101,7 +101,15 @@ export class Query {
     return this.data;
   }
 
+  resolveReferences(): Collection {
+    return this.data.map(item => this._resolveReferences(item));
+  }
+
   first(): Record<string, any> | undefined {
+    return this.data[0];
+  }
+
+  private firstDoc(): Record<string, any> | undefined {
     return this.data[0];
   }
 
@@ -148,12 +156,76 @@ export class Query {
     );
   }
 
+  id(): string[] {
+    return this.data.map(item => item._id).filter(id => id !== undefined);
+  }
+
+  private _resolveReferences(doc: Record<string, any>): Record<string, any> {
+    const resolved = { ...doc };
+
+    for (const [key, value] of Object.entries(resolved)) {
+      if (typeof value === 'string' && value.startsWith('[') && value.endsWith(']')) {
+        const refContent = value.slice(1, -1); // Remove [ and ]
+        const [collectionName, id] = refContent.split(':');
+        if (collectionName && id) {
+          try {
+            const referencedDoc = this.db.get(collectionName).where({ _id: id }).firstDoc();
+            if (referencedDoc) {
+              resolved[key] = referencedDoc;
+            }
+            // If not found, keep the original reference string
+          } catch (error) {
+            // Collection doesn't exist, keep original reference string
+          }
+        }
+      } else if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+        // Recursively resolve references in nested objects
+        resolved[key] = this._resolveReferences(value);
+      } else if (Array.isArray(value)) {
+        // Handle arrays of references
+        resolved[key] = value.map(item => {
+          if (typeof item === 'string' && item.startsWith('[') && item.endsWith(']')) {
+            const refContent = item.slice(1, -1);
+            const [collectionName, id] = refContent.split(':');
+            if (collectionName && id) {
+              try {
+                const referencedDoc = this.db.get(collectionName).where({ _id: id }).firstDoc();
+                return referencedDoc || item; // Keep original if not found
+              } catch (error) {
+                return item; // Keep original if collection doesn't exist
+              }
+            }
+          } else if (typeof item === 'object' && item !== null) {
+            return this._resolveReferences(item);
+          }
+          return item;
+        });
+      }
+    }
+
+    return resolved;
+  }
+
+  private generateId(): string {
+    // Simple ID generation - could be improved with crypto.randomUUID() in newer Deno
+    return Date.now().toString(36) + Math.random().toString(36).substr(2);
+  }
+
   // --- WRITE METHODS ---
   insert(doc: Record<string, any>): Query {
     if (!doc || typeof doc !== "object" || Array.isArray(doc)) {
       throw new Error("Document must be a non-null object");
     }
-    this.original.push(doc);
+
+    // Create a copy to avoid mutating the passed object
+    const docToInsert = { ...doc };
+
+    // Auto-generate _id if not provided
+    if (!docToInsert._id) {
+      docToInsert._id = this.generateId();
+    }
+
+    this.original.push(docToInsert);
     if (this.db.shouldAutoSave()) this.db.save();
     return this;
   }
@@ -162,6 +234,7 @@ export class Query {
     if (!updates || typeof updates !== "object" || Array.isArray(updates)) {
       throw new Error("Updates must be a non-null object");
     }
+
     for (const item of this.original) {
       if (this.data.includes(item)) Object.assign(item, updates);
     }
